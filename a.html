@@ -1,0 +1,261 @@
+/* script.js - global utilities + dashboard logic
+   Requires: none (Chart.js optional), Leaflet used in peta.js
+*/
+const apiKey = "67747cc945ba37b5ab1c9ecf212e0db5";
+
+// ---------- Utilities ----------
+function safeGet(id) { return document.getElementById(id); }
+function q(sel) { return document.querySelector(sel); }
+function formatTime(unix) { return new Date(unix * 1000).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}); }
+function isOKCode(code){ return code === 200 || code === "200"; }
+
+// ---------- Fetch helpers ----------
+async function fetchWeather(city){
+  // current weather
+  try{
+    const res = await fetch(`https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(city)}&units=metric&appid=${apiKey}`);
+    const data = await res.json();
+    if(!isOKCode(data.cod)) {
+      console.warn("fetchWeather -> city not found:", data);
+      return null;
+    }
+    return data;
+  }catch(e){
+    console.error("fetchWeather error:", e);
+    return null;
+  }
+}
+
+async function fetchForecast(city){
+  // 5-day / 3-hour forecast
+  try{
+    const res = await fetch(`https://api.openweathermap.org/data/2.5/forecast?q=${encodeURIComponent(city)}&units=metric&appid=${apiKey}`);
+    const data = await res.json();
+    if(!isOKCode(data.cod)) {
+      console.warn("fetchForecast -> city not found:", data);
+      return null;
+    }
+    return data;
+  }catch(e){
+    console.error("fetchForecast error:", e);
+    return null;
+  }
+}
+
+// ---------- Dashboard (today + weekly + hourly + monthly chart) ----------
+async function updateTodayWeather(city){
+  // fetch current + forecast
+  const now = await fetchWeather(city);
+  if(!now) { alert("Kota tidak ditemukan!"); return; }
+
+  // update today card (safe updates)
+  const cityNameEl = safeGet("cityName");
+  const currentCondEl = safeGet("currentCond");
+  const tempEl = safeGet("temp"); // may not exist in your HTML; safe check
+  const humidEl = safeGet("humid");
+  const windEl = safeGet("wind");
+  const sunriseEl = safeGet("sunrise");
+  const sunsetEl = safeGet("sunset");
+
+  if(cityNameEl) cityNameEl.textContent = `${now.name}, ${now.sys.country || ""}`;
+  if(currentCondEl) currentCondEl.textContent = now.weather?.[0]?.description || now.weather?.[0]?.main || "-";
+  if(tempEl) tempEl.textContent = Math.round(now.main.temp) + "°C";
+  if(humidEl) humidEl.textContent = now.main.humidity + "%";
+  if(windEl) windEl.textContent = now.wind.speed + " m/s";
+  if(sunriseEl) sunriseEl.textContent = formatTime(now.sys.sunrise);
+  if(sunsetEl) sunsetEl.textContent = formatTime(now.sys.sunset);
+
+  // save last searched city for other pages
+  try { localStorage.setItem("selectedCity", now.name); } catch(e){}
+
+  // update weekly forecast (uses forecast endpoint)
+  updateWeeklyForecast(city);
+
+  // update monthly chart (if canvas exists and Chart is available)
+  updateMonthlyChartIfNeeded(city);
+}
+
+// Weekly forecast: 7 cards horizontal + clickable -> hourly detail
+async function updateWeeklyForecast(city){
+  const forecastData = await fetchForecast(city);
+  if(!forecastData) return;
+
+  const weeklyEl = safeGet("weeklyForecast");
+  if(!weeklyEl) return;
+
+  weeklyEl.innerHTML = "";
+  // daily at 12:00:00
+  const daily = forecastData.list.filter(i => i.dt_txt.includes("12:00:00")).slice(0,7);
+
+  daily.forEach((d, idx) => {
+    const date = new Date(d.dt_txt);
+    const dayName = date.toLocaleDateString('id-ID', {weekday:'short'});
+    const temp = Math.round(d.main.temp);
+    const cond = d.weather[0].main;
+
+    const card = document.createElement("div");
+    card.className = "forecast-day";
+    card.tabIndex = 0;
+    card.innerHTML = `<div class="fd-day">${dayName}</div><div class="fd-temp">${temp}°C</div><div class="fd-cond">${cond}</div>`;
+
+    card.addEventListener("click", () => showHourlyDetailForDate(d.dt_txt.split(" ")[0], forecastData.list));
+    card.addEventListener("keypress", (e) => { if(e.key === "Enter") showHourlyDetailForDate(d.dt_txt.split(" ")[0], forecastData.list); });
+
+    weeklyEl.appendChild(card);
+  });
+}
+
+// show hourly details for a chosen date (dateStr = 'YYYY-MM-DD')
+function showHourlyDetailForDate(dateStr, fullList){
+  const hourlySection = safeGet("hourlyDetails");
+  const hourlyList = safeGet("hourlyList");
+  const hourlyTitle = safeGet("hourlyTitle");
+
+  if(!hourlySection || !hourlyList) return;
+  hourlyList.innerHTML = "";
+  hourlySection.classList.remove("hidden");
+
+  // filter by date prefix
+  const hourlyData = fullList.filter(item => item.dt_txt.startsWith(dateStr));
+  if(hourlyTitle) {
+    const date = new Date(dateStr);
+    hourlyTitle.textContent = `Hourly Forecast — ${date.toLocaleDateString('id-ID', { weekday:'long', day:'numeric', month:'short' })}`;
+  }
+
+  hourlyData.forEach(h => {
+    const time = new Date(h.dt_txt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    const temp = Math.round(h.main.temp) + "°C";
+    const wind = h.wind.speed + " m/s";
+    const cond = h.weather[0].main;
+
+    const div = document.createElement("div");
+    div.className = "hour-card";
+    div.innerHTML = `<div class="hour-row"><strong>${time}</strong><span class="hour-temp">${temp}</span></div>
+                     <div class="hour-meta">${cond} • 💨 ${wind} • 💧 ${h.main.humidity}%</div>`;
+    hourlyList.appendChild(div);
+  });
+
+  // scroll to hourly section smoothly
+  hourlySection.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+// ===== MONTHLY CHART (DASHBOARD) =====
+async function updateMonthlyChartIfNeeded(city){
+  const monthlyChartEl = document.getElementById("monthlyChart");
+  if(!monthlyChartEl) return;                      // tidak ada canvas
+  if(typeof Chart === "undefined") return;        // Chart.js belum dimuat
+
+  // ambil data forecast dari API
+  const forecast = await fetchForecast(city);
+  if(!forecast || !forecast.list){
+    console.warn("No forecast data available.");
+    return;
+  }
+
+  // ambil data jam 12 siang untuk 7 hari
+  const daily = forecast.list
+    .filter(i => i.dt_txt.includes("12:00:00"))
+    .slice(0, 7);
+
+  if(daily.length === 0){
+    console.warn("Forecast list empty for mid-day points.");
+    return;
+  }
+
+  const labels = daily.map(d =>
+    new Date(d.dt_txt).toLocaleDateString("id-ID", { weekday: "short" })
+  );
+
+  const temps = daily.map(d => Math.round(d.main.temp));
+
+  // hancurkan chart sebelumnya jika valid
+  if (window.monthlyChart instanceof Chart) {
+    window.monthlyChart.destroy();
+  }
+
+  // buat chart baru
+  try {
+    window.monthlyChart = new Chart(monthlyChartEl.getContext("2d"), {
+      type: "line",
+      data: {
+        labels,
+        datasets: [
+          {
+            label: "Temp (°C)",
+            data: temps,
+            borderColor: "#4fd1c5",
+            backgroundColor: "rgba(79,209,197,0.15)",
+            tension: 0.3,
+            fill: true,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: false } },
+      },
+    });
+  } catch (e) {
+    console.error("monthlyChart error:", e);
+  }
+}
+
+
+// ---------- Save / Favorites ----------
+function saveCityToFavorites(city){
+  if(!city) return;
+  let fav = JSON.parse(localStorage.getItem("favorites") || "[]");
+  if(!fav.includes(city)) {
+    fav.unshift(city);
+    if(fav.length > 20) fav = fav.slice(0,20);
+    localStorage.setItem("favorites", JSON.stringify(fav));
+  }
+  // update saved UI if present
+  try { if(typeof loadFavorites === "function") loadFavorites(); } catch(e){}
+}
+
+// ---------- Entry initialization for dashboard page ----------
+function initDashboardListeners(){
+  const cityInput = safeGet("cityInput");
+  if(!cityInput) return;
+  // Enter to search
+  cityInput.addEventListener("keydown", (e) => {
+    if(e.key === "Enter"){
+      const city = cityInput.value.trim();
+      if(!city) return alert("Masukkan nama kota!");
+      updateTodayWeather(city);
+    }
+  });
+
+  // Save button
+  const saveBtn = safeGet("saveCity");
+  if(saveBtn){
+    saveBtn.addEventListener("click", () => {
+      const lastCity = localStorage.getItem("selectedCity") || cityInput.value.trim();
+      if(lastCity) { saveCityToFavorites(lastCity); alert("Disimpan ke favorites"); }
+    });
+  }
+
+  // optional link to statistics (if present)
+  const toStats = safeGet("toStats");
+  if(toStats){
+    toStats.addEventListener("click", ()=> {
+      const last = localStorage.getItem("selectedCity");
+      if(last) {
+        try { localStorage.setItem("selectedCity", last); } catch(e){}
+        window.location.href = "statistik.html";
+      } else {
+        alert("Cari kota dulu di Dashboard terlebih dahulu.");
+      }
+    });
+  }
+
+  // Try to auto-load last selected city
+  const last = localStorage.getItem("selectedCity");
+  if(last) updateTodayWeather(last);
+}
+
+// Initialize dashboard if DOM contains dashboard-specific ids
+document.addEventListener("DOMContentLoaded", () => {
+  initDashboardListeners();
+});
