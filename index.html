@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SkyWeather — Dashboard</title>
+
+  <!-- Chart.js (CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.3.0/dist/chart.umd.min.js"></script>
+  <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
+
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+    <!-- SIDEBAR -->
+<aside class="sidebar" aria-label="Main navigation">
+  <div class="brand">
+    <div class="brand-icon">🌤</div>
+    <span class="brand-name">SkyWeather</span>
+  </div>
+
+  <nav class="nav" role="navigation" aria-label="Primary">
+
+    <!-- HOME -->
+    <a href="index.html" class="nav-item nav-item--active">
+      <i class="bx bxs-home nav-icon" style="color:white;"></i>
+      <span class="nav-label">Home</span>
+    </a>
+
+    <!-- STATISTICS -->
+    <a href="statistik.html" class="nav-item">
+      <i class="bx bxs-bar-chart-alt-2 nav-icon" style="color:white;"></i>
+      <span class="nav-label">Statistics</span>
+    </a>
+
+    <!-- MAP -->
+    <a href="peta.html" class="nav-item">
+      <i class="bx bxs-map nav-icon" style="color:white;"></i>
+      <span class="nav-label">Map</span>
+    </a>
+
+    <!-- SAVED -->
+    <a href="saved.html" class="nav-item">
+      <i class="bx bxs-bookmark nav-icon" style="color:white;"></i>
+      <span class="nav-label">Saved</span>
+    </a>
+
+    <!-- SETTINGS -->
+    <a href="setelan.html" class="nav-item">
+      <i class="bx bxs-cog nav-icon" style="color:white;"></i>
+      <span class="nav-label">Settings</span>
+    </a>
+
+  </nav>
+
+  <div class="sidebar-foot">
+    <small class="version">v1.0 • SkyWeather</small>
+  </div>
+</aside>
+
+
+    <!-- MAIN -->
+    <main class="main">
+      <header class="header">
+        <div class="header-left">
+          <h1 class="page-title">Dashboard</h1>
+          <p class="subtitle">Pantau cuaca real-time & prakiraan</p>
+        </div>
+
+        <div class="header-right">
+          <div class="control-inline">
+            <!-- NOTE: theme removed from header per revisi (pindah ke setelan) -->
+            <input id="cityInput" class="search-box" placeholder="Ketik nama kota, tekan Enter" aria-label="Cari kota" />
+          </div>
+        </div>
+      </header>
+
+      <!-- Today's Weather Card -->
+      <section class="card today-weather" id="todayCard" aria-live="polite">
+        <div class="top-row">
+          <div>
+            <h2 id="cityName">-</h2>
+            <p id="currentCond">-</p>
+          </div>
+          <div class="temp-large" id="temp">--°C</div>
+        </div>
+
+        <div class="today-grid">
+          <div class="weather-card">
+            <div class="icon">💧</div>
+            <div class="label">Humidity</div>
+            <div id="humid" class="value">--%</div>
+          </div>
+
+          <div class="weather-card">
+            <div class="icon">💨</div>
+            <div class="label">Wind</div>
+            <div id="wind" class="value">-- m/s</div>
+          </div>
+
+          <div class="weather-card">
+            <div class="icon">🌅</div>
+            <div class="label">Sunrise</div>
+            <div id="sunrise" class="value">--:--</div>
+          </div>
+
+          <div class="weather-card">
+            <div class="icon">🌇</div>
+            <div class="label">Sunset</div>
+            <div id="sunset" class="value">--:--</div>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button id="toStats" class="btn">View Statistics</button>
+          <button id="saveCity" class="btn btn-outline">Save</button>
+        </div>
+      </section>
+
+      <!-- Weekly forecast (horizontal scroll) -->
+      <section class="card weekly-forecast">
+        <h3>7-Day Forecast</h3>
+        <div class="forecast-scroll">
+          <div class="forecast-grid" id="weeklyForecast" role="list">
+            <!-- JS injects 7 day cards; each card contains its own hourly container (expand in-card) -->
+          </div>
+        </div>
+      </section>
+
+      <!-- Monthly chart -->
+      <section class="card monthly-stats">
+        <h3>Monthly Overview (sample 7 days)</h3>
+        <canvas id="monthlyChart" height="140" aria-label="Monthly temperature chart"></canvas>
+      </section>
+
+      <footer class="footer">© 2025 SkyWeather — AIngineers</footer>
+    </main>
+  </div>
+
+  <script src="script.js" defer></script>
+</body>
+</html>
